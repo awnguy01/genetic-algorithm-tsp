@@ -12,6 +12,19 @@
   justify-content: center;
 }
 
+.start-container {
+  display: flex;
+  justify-content: space-around;
+  margin: 1rem;
+}
+
+.start-button-wrapper {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
 .results-table-container {
   display: flex;
   justify-content: center;
@@ -19,6 +32,7 @@
 }
 
 .results-table {
+  text-align: center;
   width: 80vw;
   tr {
     border-bottom: 1px solid white;
@@ -29,4 +43,16 @@
       width: 10rem;
     }
   }
+}
+
+.results-route {
+  margin: 0 4rem;
+}
+
+.time-elapsed {
+  text-align: center;
+}
+
+.canvas-container {
+  height: 500px;
 }

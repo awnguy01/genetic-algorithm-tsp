@@ -2,7 +2,7 @@ import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CityNode } from 'src/app/classes/models/city-node';
 import { Utils } from 'src/app/classes/utils';
 import { FormControl, FormBuilder } from '@angular/forms';
-import { Observable, Subscription } from 'rxjs';
+import { Observable, BehaviorSubject, timer, Subscription } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import * as CanvasJS from 'src/assets/lib/canvasjs.min.js';
 import { AiService } from 'src/app/services/ai.service';
@@ -39,6 +39,23 @@ const CHART_OPTS = {
     }
   ]
 };
+const COST_CHART_OPTS = {
+  ...CHART_OPTS,
+  theme: 'dark1',
+  title: {
+    text: 'Improvement Graph'
+  },
+  axisX: {
+    title: 'Generation',
+    viewportMinimum: 0,
+    viewportMaximum: 310000
+  },
+  axisY: {
+    title: 'Cost',
+    viewportMinimum: 0,
+    viewportMaximum: 7000
+  }
+};
 
 @Component({
   selector: 'app-main',
@@ -46,18 +63,63 @@ const CHART_OPTS = {
   styleUrls: ['./main.component.scss']
 })
 export class MainComponent implements OnInit {
-  @ViewChild('graphCanvas') graphCanvas: ElementRef;
+  @ViewChild('graphCanvas', { static: true }) graphCanvas: ElementRef;
+
+  currResults = new BehaviorSubject<Results>(undefined);
+  currCities = new BehaviorSubject<CityNode[]>([]);
+  selectedHistory = new BehaviorSubject<Results[]>([]);
+  generationBreak = 0;
 
   tspFileCtrl: FormControl = this.fb.control(null);
-  chart: any;
+  chart: any; // Displays the currently shortest traced route
+  costChart: any; // Displays the improvement in minimum distance after subsequent generations
 
   constructor(readonly fb: FormBuilder, readonly aiSvc: AiService) {}
 
   ngOnInit() {
     this.chart = new CanvasJS.Chart('chartContainer', CHART_OPTS);
+    this.costChart = new CanvasJS.Chart('costChartContainer', COST_CHART_OPTS);
     this.chart.render();
+    this.costChart.render();
     this.watchResultChanges().subscribe();
     this.tspFileCtrlChanges().subscribe();
+
+    this.listenToHistory();
+    this.pollResults();
+  }
+
+  /** pollResults
+   * @desc checks the current results every 250 milliseconds to render the graphs
+   */
+  pollResults(): Subscription {
+    return timer(0, 250).subscribe(() => {
+      const currResults: Results = this.currResults.getValue();
+      if (currResults) {
+        this.chart.options.data[0].dataPoints = Utils.convertCitiesToDataPoints(
+          currResults.minRoute
+        );
+        this.chart.render();
+        if (currResults.generation >= this.generationBreak) {
+          const selectedHistory = this.selectedHistory.getValue();
+          this.selectedHistory.next([...selectedHistory, currResults]);
+          this.generationBreak += 10000;
+        }
+      }
+    });
+  }
+
+  /** listenToHistory
+   * @desc updates the improvement graph every time a new data point is received
+   */
+  listenToHistory(): Subscription {
+    return this.selectedHistory.subscribe((results: Results[]) => {
+      const dataPoints = results.map((result: Results) => ({
+        x: result.generation,
+        y: result.minDistance
+      }));
+      this.costChart.options.data[0].dataPoints = dataPoints;
+      this.costChart.render();
+    });
   }
 
   /** watchResultChanges
@@ -67,12 +129,8 @@ export class MainComponent implements OnInit {
     return this.aiSvc.results.asObservable().pipe(
       tap((results?: Results) => {
         if (results) {
-          this.chart.options.data[0].dataPoints = Utils.convertCitiesToDataPoints(
-            results.minRoute
-          );
-          this.chart.render();
+          this.currResults.next(results);
         }
-        console.log(results);
       })
     );
   }
@@ -93,12 +151,39 @@ export class MainComponent implements OnInit {
             allCities
           );
           this.chart.render();
-          this.aiSvc.startGeneticAlgorithm(allCities);
+          this.currCities.next(allCities);
         };
         if (file) {
           reader.readAsText(file);
         }
       })
     );
+  }
+
+  /** routeToString
+   * @desc adds a space between nodes in a route string
+   */
+  routeToString(route: CityNode[]): string {
+    return Utils.routeToString(route).replace(/,/g, ', ');
+  }
+
+  /** calcStandardDeviation
+   * @desc calls the util function to calculate the standard deviation of a population
+   */
+  calcStandardDeviation(population: CityNode[][]) {
+    const distances = population.map((route: CityNode[]) =>
+      Utils.calcTotalDistance(route, true)
+    );
+    return Utils.calcStandardDeviation(distances);
+  }
+
+  /** runGeneticAlgorithm
+   * @desc trigger to start a specified genetic algorithm
+   */
+  runGeneticAlgorithm(algorithm: 1 | 2 | 3 | 4) {
+    const allCities = this.currCities.getValue();
+    if (allCities) {
+      this.aiSvc.startGeneticAlgorithm(algorithm, allCities);
+    }
   }
 }

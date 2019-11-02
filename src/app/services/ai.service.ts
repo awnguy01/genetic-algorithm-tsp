@@ -2,49 +2,31 @@ import { Injectable } from '@angular/core';
 import { CityNode } from '../classes/models/city-node';
 import { BehaviorSubject } from 'rxjs';
 import { Results } from '../classes/models/results';
-import { Utils } from '../classes/utils';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AiService {
   results = new BehaviorSubject<Results | undefined>(undefined);
+  worker: Worker;
 
-  constructor() {}
-
-  initRandomPopulation(allCities: CityNode[]): CityNode[][] {
-    const pool: CityNode[][] = [];
-    for (let i = 0; i < 100; i++) {
-      const route: CityNode[] = [];
-      const remCities = [...allCities];
-      while (remCities.length) {
-        const randomIndex = Math.floor(Math.random() * remCities.length);
-        route.push(remCities[randomIndex]);
-        remCities.splice(randomIndex, 1);
-      }
-      pool.push(route);
+  constructor() {
+    // updates the results upon receiving a new message from the web worker
+    if (typeof Worker !== 'undefined') {
+      this.worker = new Worker('./ai.worker', { type: 'module' });
+      this.worker.onmessage = ({ data }) => {
+        const results: Results = data;
+        this.results.next(results);
+      };
+    } else {
+      // Web Workers are not supported in this environment.
     }
-    return pool;
   }
 
-  startGeneticAlgorithm(allCities: CityNode[]): void {
-    const population: CityNode[][] = this.initRandomPopulation(allCities);
-    const minRoute: CityNode[] = this.findPopulationMinRoute(population);
-    const minDistance: number = Utils.calcTotalDistance(minRoute);
-    const newResults: Results = new Results(population, minRoute, minDistance);
-    this.results.next(newResults);
-  }
-
-  findPopulationMinRoute(population: CityNode[][]): CityNode[] {
-    let minRoute: CityNode[] = population[0];
-    let minDistance: number = Utils.calcTotalDistance(minRoute);
-    population.forEach((route: CityNode[]) => {
-      const routeDistance: number = Utils.calcTotalDistance(route);
-      if (routeDistance < minDistance) {
-        minRoute = route;
-        minDistance = routeDistance;
-      }
-    });
-    return minRoute;
+  /** startGeneticAlgorithm
+   * @desc sends a signal to the web worker to start the specified algorithm
+   */
+  startGeneticAlgorithm(algorithm: 1 | 2 | 3 | 4, allCities: CityNode[]) {
+    this.worker.postMessage({ algorithm, allCities });
   }
 }

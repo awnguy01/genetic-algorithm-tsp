@@ -2,6 +2,7 @@ import { CityNode } from './models/city-node';
 import { LineSegment } from './models/line-segment';
 import { Line } from './models/line';
 import { PointLineDistResults } from './models/point-line-dist-results';
+import * as moment from 'moment';
 
 export class Utils {
   /** parseCitiesFromFileText
@@ -15,6 +16,7 @@ export class Utils {
       const lineParts = line.split(' ');
       return new CityNode(lineParts[0], +lineParts[1], +lineParts[2]);
     });
+
     return cities;
   }
 
@@ -26,14 +28,18 @@ export class Utils {
     const yDiff: number = b.y - a.y;
     return Math.sqrt(Math.pow(xDiff, 2) + Math.pow(yDiff, 2));
   }
-  static calcTotalDistance(cities: CityNode[]): number {
+  static calcTotalDistance(route: CityNode[], loop: boolean): number {
     let totalDistance = 0;
+    const cities: CityNode[] = route;
     if (cities && cities.length) {
       cities.forEach((city: CityNode, index: number) => {
         if (index + 1 < cities.length) {
           totalDistance += Utils.calcDistance(city, cities[index + 1]);
         }
       });
+      totalDistance += loop
+        ? Utils.calcDistance(cities[cities.length - 1], cities[0])
+        : 0;
     }
     return totalDistance;
   }
@@ -120,16 +126,44 @@ export class Utils {
     });
   }
 
-  /** findAllEdges
-   * @desc find all the edges connecting each city node in a route
+  /** calcStandardDeviation
+   * @desc calculates the standard deviation of a list of numbers
    */
-  static findAllEdges(route: CityNode[]): LineSegment[] {
-    const edges: LineSegment[] = [];
-    route.forEach((city: CityNode, index: number) => {
-      if (index + 1 < route.length) {
-        edges.push(new LineSegment(city, route[index + 1]));
-      }
-    });
-    return edges;
+  static calcStandardDeviation(values: number[]): number {
+    const avg = this.calcAverage(values);
+    const squareDiffs: number[] = values.map((val: number) => (val - avg) ** 2);
+    return this.calcAverage(squareDiffs) ** 0.5;
+  }
+
+  /** calcAverage
+   * @desc calculates the average of a list of numbers
+   */
+  static calcAverage(values: number[]): number {
+    return (
+      values.reduce((sum: number, val: number) => sum + val) / values.length
+    );
+  }
+
+  /** formatTime
+   * @desc converts milliseconds into HH:mm:ss format
+   */
+  static formatTime(milliseconds: number) {
+    const duration = moment.duration(milliseconds);
+    const parseTime = (measurement: any) =>
+      duration
+        .get(measurement)
+        .toString()
+        .padStart(2, '0');
+    const hours = parseTime('hours');
+    const mins = parseTime('minutes');
+    const secs = parseTime('seconds');
+    return `${hours}:${mins}:${secs}`;
+  }
+
+  /** routeToString
+   * @desc returns a list of names of each node in a route
+   */
+  static routeToString(route: CityNode[]): string {
+    return route.map((node: CityNode) => node.name).toString();
   }
 }
